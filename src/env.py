@@ -6,7 +6,7 @@
 # might have to enter windows and change partitions with gnome, anaconda keeps failing to download
 # https://conda.io/projects/conda/en/latest/user-guide/install/linux.html
 
-import gym
+import gym 
 
 env = gym.make(
     "LunarLander-v2",
