@@ -1,6 +1,9 @@
 from collections import defaultdict
 import gymnasium as gym
 import numpy as np
+import tensorflow as tf
+from keras import Sequential, Input
+from keras.layers import Dense
 
 
 class BlackjackAgent:
@@ -35,6 +38,15 @@ class BlackjackAgent:
         self.final_epsilon = final_epsilon
 
         self.training_error = []
+        self.rewards = []
+
+        self.model = Sequential([
+            Input(shape=(3,)),
+            Dense(16, activation='relu'),
+            Dense(8, activation='relu'),
+            Dense(2, activation='linear'),
+        ])
+        self.model.compile(optimizer='adam', loss='mse')
 
     def get_action(self, obs: tuple[int, int, bool]) -> int:
         """
@@ -46,7 +58,8 @@ class BlackjackAgent:
             return self.env.action_space.sample()
         # with probability (1 - epsilon) act greedily (exploit)
         else:
-            return int(np.argmax(self.q_values[obs]))
+            q_values = self.model(np.array(obs)[np.newaxis])
+            return int(np.argmax(q_values))
 
     def update(
         self,
