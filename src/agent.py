@@ -1,84 +1,73 @@
 from collections import defaultdict
 import gymnasium as gym
-import numpy as np
-import tensorflow as tf
 from keras import Sequential, Input
 from keras.layers import Dense
+from keras.models import load_model
+import numpy as np
+import os
+import tensorflow as tf
+import time
 
 
 class BlackjackAgent:
     def __init__(
         self,
-        env: gym.Env,
-        learning_rate: float,
-        initial_epsilon: float,
-        epsilon_decay: float,
-        final_epsilon: float,
+        env: gym.Env = gym.make("Blackjack-v1", sab=False),
+        learning_rate: float = 0.01,
         discount_factor: float = 0.95,
+        n_episodes: int = 100,
+        model_path: str = "blackjack_model",
+        load: bool = True,
     ):
-        """Initialize a Reinforcement Learning agent with an empty dictionary
-        of state-action values (q_values), a learning rate and an epsilon.
-
-        Args:
-            env: The training environment
-            learning_rate: The learning rate
-            initial_epsilon: The initial epsilon value
-            epsilon_decay: The decay for epsilon
-            final_epsilon: The final epsilon value
-            discount_factor: The discount factor for computing the Q-value
-        """
         self.env = env
+        self.env = gym.wrappers.RecordEpisodeStatistics(env, n_episodes)
         self.q_values = defaultdict(lambda: np.zeros(env.action_space.n))
 
         self.lr = learning_rate
         self.discount_factor = discount_factor
+        self.n_episodes = n_episodes
 
-        self.epsilon = initial_epsilon
-        self.epsilon_decay = epsilon_decay
-        self.final_epsilon = final_epsilon
-
-        self.training_error = []
         self.rewards = []
+        self.length_queue = []
+        self.model_path = model_path
 
-        self.model = Sequential([
-            Input(shape=(3,)),
-            Dense(16, activation='relu'),
-            Dense(8, activation='relu'),
-            Dense(2, activation='linear'),
-        ])
-        self.model.compile(optimizer='adam', loss='mse')
+        if load:
+            self.load_model()
+        else:
+            self.model = Sequential([
+                Input(shape=(3,)),
+                Dense(16, activation='relu'),
+                Dense(8, activation='relu'),
+                Dense(2, activation='linear'),
+            ])
+            self.model.compile(optimizer='adam', loss='mse')
 
     def get_action(self, obs: tuple[int, int, bool]) -> int:
-        """
-        Returns the best action with probability (1 - epsilon)
-        otherwise a random action with probability epsilon to ensure exploration.
-        """
-        # with probability epsilon return a random action to explore the environment
-        if np.random.random() < self.epsilon:
-            return self.env.action_space.sample()
-        # with probability (1 - epsilon) act greedily (exploit)
+        q_values = self.model(np.array(obs)[np.newaxis])
+        return int(np.argmax(q_values))
+
+    def save_model(self):
+        self.model.save(self.model_path + ".keras")
+        self.model.save_weights(os.path.join("src", "weights", self.model_path + f"_{time.strftime("%Y%m%d-%H%M%S")}.weights.h5"))
+        np.save(self.model_path + "_rewards.npy", np.array(self.rewards))
+        np.save(self.model_path + "_lengths.npy", np.array(self.length_queue))
+        print("Model saved successfully!")
+
+    def load_model(self):
+        if os.path.exists(self.model_path + ".keras"):
+            self.model = load_model(self.model_path + ".keras")
+            print("Model loaded!")
         else:
-            q_values = self.model(np.array(obs)[np.newaxis])
-            return int(np.argmax(q_values))
+            print("model file does not exist")
 
-    def update(
-        self,
-        obs: tuple[int, int, bool],
-        action: int,
-        reward: float,
-        terminated: bool,
-        next_obs: tuple[int, int, bool],
-    ):
-        """Updates the Q-value of an action."""
-        future_q_value = (not terminated) * np.max(self.q_values[next_obs])
-        temporal_difference = (
-            reward + self.discount_factor * future_q_value - self.q_values[obs][action]
-        )
+        if os.path.exists(self.model_path + "_rewards.npy"):
+            self.rewards = list(np.load(self.model_path + "_rewards.npy"))
+            print(f"Loaded reward history of {len(self.rewards)} episodes.")
+        else:
+            print("reward history file does not exist")
 
-        self.q_values[obs][action] = (
-            self.q_values[obs][action] + self.lr * temporal_difference
-        )
-        self.training_error.append(temporal_difference)
-
-    def decay_epsilon(self):
-        self.epsilon = max(self.final_epsilon, self.epsilon - self.epsilon_decay)
+        if os.path.exists(self.model_path + "_lengths.npy"):
+            self.length_queue = list(np.load(self.model_path + "_lengths.npy"))
+            print(f"Loaded length history of {len(self.length_queue)} episodes.")
+        else:
+            print("length history file does not exist")
