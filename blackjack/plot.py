@@ -1,20 +1,10 @@
-import os
-import sys
 import gymnasium as gym
 from matplotlib import pyplot as plt
 import numpy as np
-from agent import LunarLanderAgent
+from agent import BlackjackAgent
 
-
-model_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join("src", "models", "default")
-model_name = sys.argv[2] if len(sys.argv) > 2 else "lunar_lander_model"
-
-agent = LunarLanderAgent(
-    model_path=model_path,
-    model_name=model_name,
-)
-
-DENOM = 10
+agent = BlackjackAgent()
+DENOM = 1000
 
 fig, axs = plt.subplots(1, 2, figsize=(20, 8))
 

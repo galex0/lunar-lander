@@ -1,49 +1,62 @@
+import os
+import sys
 import gymnasium as gym
 import numpy as np
 from tqdm import tqdm
-from agent import BlackjackAgent
+from agent import LunarLanderAgent
 
 # hyperparameters
-learning_rate = 0.01
-n_episodes = 100_000
+learning_rate = 0.001
+discount_factor = 0.99
+n_episodes = 3000
+batch_size = 32
 
-agent = BlackjackAgent(
+model_path = sys.argv[1] if len(sys.argv) > 1 else os.path.join("src", "models", "default")
+model_name = sys.argv[2] if len(sys.argv) > 2 else "lunar_lander_model"
+
+agent = LunarLanderAgent(
     n_episodes=n_episodes,
     learning_rate=learning_rate,
+    discount_factor=discount_factor,
     load=True,
+    model_path=model_path,
+    model_name=model_name,
+    # weights_path="src/models/default/weights/lunar_lander_model_20250201-052703.weights.h5"
 )
+state_size = agent.env.observation_space.shape[0]
+
 
 for episode, i in enumerate(tqdm(range(n_episodes), leave=True)):
-    obs, info = agent.env.reset()
+    state, info = agent.env.reset()
+    state = np.reshape(state, [1, state_size])
     done = False
     total_reward = 0
 
     # play one episode
     while not done:
-        action = agent.get_action(obs)
+        action = agent.get_action(state)
 
-        next_obs, reward, terminated, truncated, info = agent.env.step(action)
+        next_state, reward, terminated, truncated, info = agent.env.step(action)
+        next_state = np.reshape(next_state, [1, state_size])
+
+        agent.remember(state, action, reward, next_state, done)
 
         done = terminated or truncated
 
-        target = np.empty((1,2))
-        if done:
-            target[0][action] = reward
-        else:
-            next_q_values = agent.model(np.array(next_obs)[np.newaxis])
-            target[0][action] = reward + agent.discount_factor * np.max(next_q_values)
-
-        agent.model.fit(np.array(obs)[np.newaxis], target, verbose=0)
-
-        obs = next_obs
+        state = next_state
         total_reward += reward
 
+        if done:
+            break
+
+    if len(agent.memory) > batch_size:
+        agent.replay(batch_size)
+    
     agent.rewards.append(total_reward)
     agent.length_queue.append(agent.env.length_queue[-1])
 
-    # save every 200 episodes
-    if ((i+1)%1000 == 0):
+    # save occasionally
+    if ((i+1)%10 == 0):
         agent.save_model()
 
-agent.save_model()
 agent.env.close()
